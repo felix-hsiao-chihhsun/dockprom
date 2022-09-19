@@ -23,13 +23,16 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
-    restart: unless-stopped
+    restart: always
     expose:
       - 9090
     networks:
       - monitor-net
     labels:
       org.label-schema.group: "monitoring"
+    hostname: $HOSTNAME
+    extra_hosts:
+      - "prom.yourdomain.com: 172.17.0.1"
 
   alertmanager:
     image: prom/alertmanager:v0.24.0
@@ -39,9 +42,30 @@ services:
     command:
       - '--config.file=/etc/alertmanager/config.yml'
       - '--storage.path=/alertmanager'
-    restart: unless-stopped
+    restart: always
     expose:
       - 9093
+    networks:
+      - monitor-net
+    labels:
+      org.label-schema.group: "monitoring"
+
+  grafana:
+    image: grafana/grafana:9.1.5
+    container_name: grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+    environment:
+      - GF_SECURITY_ADMIN_USER=${ADMIN_USER:-amdin}
+      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    env_file:
+      - .env
+    restart: always
+    expose:
+      - 3000
     networks:
       - monitor-net
     labels:
@@ -50,6 +74,8 @@ services:
   nodeexporter:
     image: prom/node-exporter:v1.3.1
     container_name: nodeexporter
+#    hostname: $HOSTNAME
+    restart: always
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -58,8 +84,8 @@ services:
       - '--path.procfs=/host/proc'
       - '--path.rootfs=/rootfs'
       - '--path.sysfs=/host/sys'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-    restart: unless-stopped
+#      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
     expose:
       - 9100
     networks:
@@ -70,37 +96,17 @@ services:
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.45.0
     container_name: cadvisor
+#    hostname: $HOSTNAME
     privileged: true
-    devices:
-      - /dev/kmsg:/dev/kmsg
     volumes:
       - /:/rootfs:ro
-      - /var/run:/var/run:ro
+      - /var/run:/var/run:rw
       - /sys:/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
       #- /cgroup:/cgroup:ro #doesn't work on MacOS only for Linux
-    restart: unless-stopped
+    restart: always
     expose:
       - 8080
-    networks:
-      - monitor-net
-    labels:
-      org.label-schema.group: "monitoring"
-
-  grafana:
-    image: grafana/grafana:9.1.1
-    container_name: grafana
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
-      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
-    environment:
-      - GF_SECURITY_ADMIN_USER=${ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
-    restart: unless-stopped
-    expose:
-      - 3000
     networks:
       - monitor-net
     labels:
@@ -118,7 +124,7 @@ services:
       org.label-schema.group: "monitoring"
 
   caddy:
-    image: caddy:2.3.0
+    image: caddy:2.5.0
     container_name: caddy
     ports:
       - "3000:3000"
@@ -130,8 +136,10 @@ services:
     environment:
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
-      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-JDJhJDE0JE91S1FrN0Z0VEsyWmhrQVpON1VzdHVLSDkyWHdsN0xNbEZYdnNIZm1pb2d1blg4Y09mL0ZP}
-    restart: unless-stopped
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-JDJhJDE0JFNSU1FtWVRsU2RTcnJhV0VBRU9VT09iNnVnaE9zcWNVRlJXd3RELkMwNG9ZejJWT0RGZ00y}
+#    env_file:
+#      - .env
+    restart: always
     networks:
       - monitor-net
     labels:
